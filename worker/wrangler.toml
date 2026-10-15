@@ -9,6 +9,15 @@ compatibility_date = "2025-01-01"
 # Example: "https://your-github-username.github.io"
 # Do NOT add a path (no "/binance-price-alert" suffix) - an origin is scheme + host only.
 ALLOWED_ORIGINS = "https://ravindu-bhagya.github.io"
+# Repository whose "Price alert checker" workflow the cron trigger starts.
+GITHUB_REPO = "Ravindu-Bhagya/currency_value_alert"
+
+# Reliable timer (GitHub's own schedule is often late or skipped): every 2 minutes,
+# the Worker starts the checker workflow when there are active alerts.
+# Needs the secret GITHUB_DISPATCH_TOKEN: a fine-grained token for this repository
+# with "Actions: Read and write" only.  npx wrangler secret put GITHUB_DISPATCH_TOKEN
+[triggers]
+crons = ["*/2 * * * *"]
 
 [[d1_databases]]
 binding = "DB"

@@ -480,6 +480,48 @@ async function route(request, env, deps) {
   throw new HttpError(404, "Not found.");
 }
 
+// ---------------------------------------------------------------- scheduled trigger
+
+/**
+ * Cloudflare Cron Trigger: starts the GitHub Actions checker on a reliable timer
+ * (GitHub's own `schedule:` is often late or skipped). The checker itself runs on
+ * GitHub because Binance blocks Cloudflare's egress IPs.
+ * Skips the dispatch when there is nothing to check, to save Actions runs.
+ */
+export async function dispatchChecker(env, fetchImpl) {
+  if (!env.GITHUB_REPO || !env.GITHUB_DISPATCH_TOKEN) {
+    console.warn("Cron: GITHUB_REPO or GITHUB_DISPATCH_TOKEN not set; skipping.");
+    return "not-configured";
+  }
+  const pending = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM alerts
+     WHERE status = 'active' OR notification_status IN ('failed', 'sending')`
+  ).first();
+  if (!pending?.n) return "idle";
+
+  const workflow = env.GITHUB_WORKFLOW || "price-alert.yml";
+  const res = await fetchImpl(
+    `https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/${workflow}/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "binance-price-alert-worker",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ref: env.GITHUB_REF || "main", inputs: { mode: "check" } }),
+    }
+  );
+  if (res.status !== 204) {
+    const detail = (await res.text().catch(() => "")).slice(0, 200);
+    console.error(`Cron: workflow dispatch failed (HTTP ${res.status}) ${detail}`);
+    return `error-${res.status}`;
+  }
+  return "dispatched";
+}
+
 export function createApp(deps = {}) {
   const resolved = { fetchImpl: deps.fetchImpl || ((...args) => fetch(...args)) };
   return {
@@ -497,6 +539,9 @@ export function createApp(deps = {}) {
         console.error("Unhandled error:", err?.message || err);
         return json({ error: "Internal server error." }, 500, cors);
       }
+    },
+    async scheduled(_event, env, ctx) {
+      ctx.waitUntil(dispatchChecker(env, resolved.fetchImpl));
     },
   };
 }

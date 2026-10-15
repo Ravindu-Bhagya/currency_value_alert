@@ -359,8 +359,12 @@ later run re-sends it. So delivery is **at-least-once**. A rare duplicate is pos
 
 ## The checking interval
 
-- The workflow is scheduled with `*/5 * * * *` (UTC), GitHub's shortest allowed interval. GitHub doesn't guarantee exact timing:
-  runs are often 5–15 minutes late, and occasionally skipped during high load.
+- **Primary timer: a Cloudflare Cron Trigger** (`[triggers]` in `worker/wrangler.toml`, every 2 minutes) starts the
+  checker workflow through GitHub's API whenever there are active alerts. It needs the Worker secret
+  `GITHUB_DISPATCH_TOKEN`: a fine-grained token for this repository with **Actions: Read and write** only
+  (`npx wrangler@4 secret put GITHUB_DISPATCH_TOKEN`). Without it the cron does nothing.
+- **Backup timer:** the workflow's own `*/5 * * * *` schedule. GitHub doesn't guarantee it: runs are often 5–15 minutes
+  late, and new repositories can go hours without a scheduled run.
 - Only the price **at the moment of each check** is compared. A spike that crosses your target and comes back
   between two checks is **missed**. This is a convenience tool, not a trading or risk-management system.
 - You can change the interval in `.github/workflows/price-alert.yml`. Keep the repository **public**:

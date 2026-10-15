@@ -8,7 +8,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { createApp } from "../worker/src/index.js";
+import { createApp, dispatchChecker } from "../worker/src/index.js";
 
 const SCHEMA = readFileSync(new URL("../worker/schema.sql", import.meta.url), "utf8");
 const ADMIN = "admin-token-0123456789abcdef";
@@ -328,4 +328,40 @@ test("health endpoint needs no auth", async () => {
   const res = await call("GET", "/api/health", { token: null });
   assert.equal(res.status, 200);
   assert.equal(res.body.ok, true);
+});
+
+function recordingFetch(status = 204) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return new Response(null, { status });
+  };
+  return { calls, fetchImpl };
+}
+
+test("cron: dispatches the checker workflow when there are active alerts", async () => {
+  await createAlert();
+  const { calls, fetchImpl } = recordingFetch();
+  const cronEnv = { ...env, GITHUB_REPO: "me/repo", GITHUB_DISPATCH_TOKEN: "gh-token" };
+  assert.equal(await dispatchChecker(cronEnv, fetchImpl), "dispatched");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.github.com/repos/me/repo/actions/workflows/price-alert.yml/dispatches");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer gh-token");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { ref: "main", inputs: { mode: "check" } });
+});
+
+test("cron: skips the dispatch when nothing needs checking", async () => {
+  const { calls, fetchImpl } = recordingFetch();
+  const cronEnv = { ...env, GITHUB_REPO: "me/repo", GITHUB_DISPATCH_TOKEN: "gh-token" };
+  assert.equal(await dispatchChecker(cronEnv, fetchImpl), "idle");
+  assert.equal(calls.length, 0);
+});
+
+test("cron: does nothing without a dispatch token and reports GitHub errors", async () => {
+  await createAlert();
+  const { calls, fetchImpl } = recordingFetch(401);
+  assert.equal(await dispatchChecker(env, fetchImpl), "not-configured");
+  assert.equal(calls.length, 0);
+  const cronEnv = { ...env, GITHUB_REPO: "me/repo", GITHUB_DISPATCH_TOKEN: "bad" };
+  assert.equal(await dispatchChecker(cronEnv, fetchImpl), "error-401");
 });
