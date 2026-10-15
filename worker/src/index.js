@@ -186,6 +186,16 @@ export async function lookupSymbol(symbol, fetchImpl, baseUrls = DEFAULT_BINANCE
   throw new HttpError(503, `Could not verify the symbol with Binance (${lastProblem}). Try again shortly.`);
 }
 
+const ASSET_RE = /^[A-Z0-9]{1,20}$/;
+
+/** Base/quote supplied by the client, accepted only if they spell out the symbol exactly. */
+export function unverifiedSymbolInfo(symbol, baseAsset, quoteAsset) {
+  const base = typeof baseAsset === "string" ? baseAsset.trim().toUpperCase() : "";
+  const quote = typeof quoteAsset === "string" ? quoteAsset.trim().toUpperCase() : "";
+  if (!ASSET_RE.test(base) || !ASSET_RE.test(quote) || base + quote !== symbol) return null;
+  return { symbol, baseAsset: base, quoteAsset: quote };
+}
+
 // ---------------------------------------------------------------- public API (web UI)
 
 async function listAlerts(env) {
@@ -209,7 +219,17 @@ async function createAlert(request, env, deps) {
   const baseUrls = env.BINANCE_BASE_URLS
     ? env.BINANCE_BASE_URLS.split(",").map((s) => s.trim()).filter(Boolean)
     : DEFAULT_BINANCE_BASE_URLS;
-  const info = await lookupSymbol(symbol, deps.fetchImpl, baseUrls);
+  let info;
+  try {
+    info = await lookupSymbol(symbol, deps.fetchImpl, baseUrls);
+  } catch (err) {
+    // Binance blocks some Cloudflare egress IPs (HTTP 403/451). The browser already validated the
+    // pair against Binance from the user's own connection, so accept its base/quote split when it
+    // is consistent; the scheduled checker reports the alert if the pair turns out not to exist.
+    if (!(err instanceof HttpError) || err.status !== 503) throw err;
+    info = unverifiedSymbolInfo(symbol, body.base_asset, body.quote_asset);
+    if (!info) throw err;
+  }
 
   const now = nowIso();
   try {

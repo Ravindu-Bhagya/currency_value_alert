@@ -539,6 +539,8 @@
     try {
       const { alert } = await api("POST", "/api/alerts", {
         symbol: selected.symbol,
+        base_asset: selected.base,
+        quote_asset: selected.quote,
         target_price: price.value,
         condition: selectedCondition(),
       });

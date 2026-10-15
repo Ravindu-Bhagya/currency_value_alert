@@ -182,6 +182,26 @@ test("returns 503 when Binance cannot be reached, falling back across hosts", as
   assert.deepEqual(urls, ["data-api.binance.vision", "api.binance.com"]);
 });
 
+test("accepts the browser-validated base/quote when Binance blocks the Worker", async () => {
+  app = createApp({ fetchImpl: async () => new Response("forbidden", { status: 403 }) });
+  const res = await call("POST", "/api/alerts", {
+    body: { symbol: "XRPUSDT", base_asset: "XRP", quote_asset: "USDT", target_price: "2.5", condition: "above" },
+  });
+  assert.equal(res.status, 201);
+  const { alert } = res.body;
+  assert.equal(alert.symbol, "XRPUSDT");
+  assert.equal(alert.base_asset, "XRP");
+  assert.equal(alert.quote_asset, "USDT");
+});
+
+test("rejects an inconsistent base/quote when Binance blocks the Worker", async () => {
+  app = createApp({ fetchImpl: async () => new Response("forbidden", { status: 403 }) });
+  const res = await call("POST", "/api/alerts", {
+    body: { symbol: "XRPUSDT", base_asset: "BTC", quote_asset: "USDT", target_price: "2.5", condition: "above" },
+  });
+  assert.equal(res.status, 503);
+});
+
 test("prevents duplicate active alerts", async () => {
   await createAlert();
   const dup = await call("POST", "/api/alerts", { body: { symbol: "XRPUSDT", target_price: "2.500", condition: "above" } });
