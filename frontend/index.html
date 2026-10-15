@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Track cryptocurrency prices and receive WhatsApp alerts.">
+  <title>Binance Price Alert</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f0b90b'/%3E%3Cpath d='M16 7a6 6 0 0 0-6 6v4l-2 3h16l-2-3v-4a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0z' fill='%23111'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7v4.6L3.3 16.4A1 1 0 0 0 4.2 18h15.6a1 1 0 0 0 .9-1.6L19 13.6V9a7 7 0 0 0-7-7zm-2.6 18a2.7 2.7 0 0 0 5.2 0z"/></svg>
+        </span>
+        <div>
+          <h1>Binance Price Alert</h1>
+          <p class="subtitle">Track cryptocurrency prices and receive WhatsApp alerts.</p>
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost" id="connect-btn" aria-haspopup="dialog">
+        <span class="dot" id="connect-dot" aria-hidden="true"></span>
+        <span id="connect-label">Connect</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+    <div id="setup-banner" class="banner banner-warn" role="alert" hidden></div>
+
+    <div class="layout">
+      <!-- ============================================================ create alert -->
+      <section class="card" aria-labelledby="create-title">
+        <h2 id="create-title">Create alert</h2>
+
+        <form id="alert-form" novalidate>
+          <div class="field">
+            <label for="pair-input">Trading pair</label>
+            <div class="combobox" id="pair-combobox">
+              <input id="pair-input" type="text" role="combobox" autocomplete="off" spellcheck="false"
+                     aria-autocomplete="list" aria-expanded="false" aria-controls="pair-listbox"
+                     aria-describedby="pair-help pair-error" placeholder="Search e.g. XRP, Bitcoin, ETH/USDT" disabled>
+              <span class="spinner spinner-input" id="pair-spinner" aria-hidden="true"></span>
+              <ul id="pair-listbox" role="listbox" aria-label="Trading pairs" hidden></ul>
+            </div>
+            <p class="help" id="pair-help" aria-live="polite">Loading Binance trading pairs…</p>
+            <p class="error-text" id="pair-error" aria-live="polite"></p>
+          </div>
+
+          <div class="price-panel" id="price-panel" aria-live="polite" hidden>
+            <div class="price-panel-head">
+              <span class="label">Current price</span>
+              <span class="badge badge-live" id="price-live">Live</span>
+            </div>
+            <div class="price-value" id="price-value">—</div>
+            <div class="price-meta" id="price-meta"></div>
+          </div>
+
+          <div class="field">
+            <label for="target-input">Target price <span class="unit" id="target-unit"></span></label>
+            <input id="target-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+                   placeholder="e.g. 2.50" aria-describedby="target-help target-error">
+            <p class="help" id="target-help">Positive number, up to 8 decimal places.</p>
+            <p class="error-text" id="target-error" aria-live="polite"></p>
+          </div>
+
+          <fieldset class="field">
+            <legend>Condition</legend>
+            <div class="segmented">
+              <label class="segment">
+                <input type="radio" name="condition" value="above" checked>
+                <span><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 5l7 8h-5v6h-4v-6H5z"/></svg>
+                  Above <small>price ≥ target</small></span>
+              </label>
+              <label class="segment">
+                <input type="radio" name="condition" value="below">
+                <span><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 19l-7-8h5V5h4v6h5z"/></svg>
+                  Below <small>price ≤ target</small></span>
+              </label>
+            </div>
+            <p class="help warn-text" id="condition-hint" aria-live="polite"></p>
+          </fieldset>
+
+          <button type="submit" class="btn btn-primary btn-block" id="create-btn">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="btn-label">Create alert</span>
+          </button>
+          <div class="form-status" id="form-status" role="status" aria-live="polite"></div>
+        </form>
+
+        <p class="fine-print">
+          Prices are checked about every 30 minutes by a scheduled job. A price that touches your
+          target briefly between checks can be missed. This is not a real-time monitor.
+        </p>
+      </section>
+
+      <!-- ============================================================ alert list -->
+      <section class="card" aria-labelledby="alerts-title">
+        <div class="card-head">
+          <h2 id="alerts-title">Your alerts</h2>
+          <div class="card-actions">
+            <span class="muted small" id="alerts-updated"></span>
+            <button type="button" class="btn btn-ghost btn-sm" id="refresh-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h7V4z"/></svg>
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="filters" role="group" aria-label="Filter alerts">
+          <button type="button" class="chip" data-filter="all" aria-pressed="true">All <span class="count" data-count="all"></span></button>
+          <button type="button" class="chip" data-filter="active" aria-pressed="false">Active <span class="count" data-count="active"></span></button>
+          <button type="button" class="chip" data-filter="triggered" aria-pressed="false">Triggered <span class="count" data-count="triggered"></span></button>
+          <button type="button" class="chip" data-filter="cancelled" aria-pressed="false">Cancelled <span class="count" data-count="cancelled"></span></button>
+        </div>
+
+        <div id="alerts-state" class="state" aria-live="polite"></div>
+        <div class="alerts" id="alerts-list" role="list" aria-labelledby="alerts-title"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer container">
+    <p>Market data: Binance public Spot API. Notifications: WhatsApp via Twilio. Monitoring only. No trading.</p>
+  </footer>
+
+  <!-- ============================================================ dialogs -->
+  <dialog id="connect-dialog" aria-labelledby="connect-title">
+    <form method="dialog" id="connect-form" class="dialog-body">
+      <h2 id="connect-title">Connect to your alert storage</h2>
+      <p class="muted">Enter the <strong>ADMIN_TOKEN</strong> you set on your Cloudflare Worker. It is sent only to your Worker and stored only in this browser.</p>
+      <div class="field">
+        <label for="key-input">Access key</label>
+        <input id="key-input" type="password" autocomplete="current-password" spellcheck="false" required minlength="16">
+        <p class="error-text" id="key-error" aria-live="polite"></p>
+      </div>
+      <label class="checkbox"><input type="checkbox" id="remember-input"> Remember on this device</label>
+      <p class="help">API: <code id="api-url-display"></code></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" id="disconnect-btn">Forget key</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" value="cancel" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="connect-submit">
+          <span class="spinner" aria-hidden="true"></span><span class="btn-label">Connect</span>
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form method="dialog" id="edit-form" class="dialog-body" novalidate>
+      <h2 id="edit-title">Edit alert</h2>
+      <p class="muted" id="edit-pair"></p>
+      <div class="field">
+        <label for="edit-target">Target price</label>
+        <input id="edit-target" type="text" inputmode="decimal" autocomplete="off" required>
+        <p class="error-text" id="edit-error" aria-live="polite"></p>
+      </div>
+      <fieldset class="field">
+        <legend>Condition</legend>
+        <div class="segmented">
+          <label class="segment"><input type="radio" name="edit-condition" value="above"><span>Above</span></label>
+          <label class="segment"><input type="radio" name="edit-condition" value="below"><span>Below</span></label>
+        </div>
+      </fieldset>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="edit-submit">
+          <span class="spinner" aria-hidden="true"></span><span class="btn-label">Save changes</span>
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <form method="dialog" class="dialog-body">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p id="confirm-message"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="submit" class="btn btn-ghost" value="cancel" autofocus>Keep it</button>
+        <button type="submit" class="btn btn-danger" value="confirm" id="confirm-ok">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast-region" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

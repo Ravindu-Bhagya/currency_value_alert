@@ -1,0 +1,21 @@
+# Cloudflare Worker configuration for the alert storage API.
+# See README.md -> "Step 4: Deploy the alert storage API".
+name = "binance-price-alert"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Comma-separated list of web origins allowed to call the API from a browser.
+# Example: "https://your-github-username.github.io"
+# Do NOT add a path (no "/binance-price-alert" suffix) - an origin is scheme + host only.
+ALLOWED_ORIGINS = "https://YOUR-GITHUB-USERNAME.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "binance-alerts"
+# Replace with the database_id printed by: npx wrangler d1 create binance-alerts
+database_id = "REPLACE-WITH-YOUR-D1-DATABASE-ID"
+
+# Secrets (never put them in this file). Set them with:
+#   npx wrangler secret put ADMIN_TOKEN
+#   npx wrangler secret put CHECKER_TOKEN

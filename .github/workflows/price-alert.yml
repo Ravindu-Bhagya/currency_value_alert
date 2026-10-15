@@ -1,0 +1,59 @@
+name: Price alert checker
+
+on:
+  schedule:
+    # Every 30 minutes (UTC). GitHub may start scheduled runs late, or skip them under heavy load.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What to run"
+        type: choice
+        default: check
+        options:
+          - check           # normal run
+          - dry-run         # evaluate only: no writes, no WhatsApp
+          - test-whatsapp   # send one test message
+
+# Least privilege: the job only needs to read the repository code.
+permissions:
+  contents: read
+
+# Never run two checks at the same time (the API also guards against duplicates).
+concurrency:
+  group: price-alert-checker
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run alert checker
+        env:
+          ALERTS_API_URL: ${{ secrets.ALERTS_API_URL }}
+          CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+          WHATSAPP_TO_NUMBER: ${{ secrets.WHATSAPP_TO_NUMBER }}
+          MAX_NOTIFICATION_ATTEMPTS: "5"
+          MODE: ${{ inputs.mode || 'check' }}
+        run: |
+          case "$MODE" in
+            check)          python -m backend.check_prices ;;
+            dry-run)        python -m backend.check_prices --dry-run ;;
+            test-whatsapp)  python -m backend.check_prices --test-whatsapp ;;
+            test-telegram)  python -m backend.check_prices --test-whatsapp ;;
+            *) echo "Unknown mode"; exit 1 ;;
+          esac

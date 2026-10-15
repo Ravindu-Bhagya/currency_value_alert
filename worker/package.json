@@ -1,0 +1,10 @@
+{
+  "name": "binance-price-alert-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ../tests/worker.test.mjs",
+    "dev": "npx wrangler@4 dev",
+    "deploy": "npx wrangler@4 deploy"
+  }
+}
