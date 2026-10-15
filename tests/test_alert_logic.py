@@ -13,7 +13,7 @@ from backend.alert_service import (
 )
 from backend.binance_client import BinanceError
 from backend.models import Alert, Condition, ValidationError, normalize_symbol, parse_price
-from backend.whatsapp_notifier import NotificationError
+from backend.email_notifier import NotificationError
 from tests.conftest import FakeBinance, FakeNotifier, InMemoryRepository, make_record
 
 
@@ -170,7 +170,7 @@ def test_binance_outage_keeps_alerts_active_and_exits_nonzero():
     assert repo.records[rec["id"]]["status"] == "active"
 
 
-def test_whatsapp_failure_marks_failed_then_retry_succeeds():
+def test_email_failure_marks_failed_then_retry_succeeds():
     repo = InMemoryRepository()
     rec = repo.add(target_price="1")
     notifier = FakeNotifier(fail_times=1, error=NotificationError("HTTP 502"))

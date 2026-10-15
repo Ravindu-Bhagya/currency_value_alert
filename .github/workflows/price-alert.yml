@@ -2,8 +2,8 @@ name: Price alert checker
 
 on:
   schedule:
-    # Every 30 minutes (UTC). GitHub may start scheduled runs late, or skip them under heavy load.
-    - cron: "*/30 * * * *"
+    # Every 5 minutes (UTC), GitHub's minimum. GitHub may start scheduled runs late, or skip them under heavy load.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -12,8 +12,8 @@ on:
         default: check
         options:
           - check           # normal run
-          - dry-run         # evaluate only: no writes, no WhatsApp
-          - test-whatsapp   # send one test message
+          - dry-run         # evaluate only: no writes, no email
+          - test-email      # send one test email
 
 # Least privilege: the job only needs to read the repository code.
 permissions:
@@ -43,17 +43,24 @@ jobs:
         env:
           ALERTS_API_URL: ${{ secrets.ALERTS_API_URL }}
           CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
-          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
-          WHATSAPP_TO_NUMBER: ${{ secrets.WHATSAPP_TO_NUMBER }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
           MAX_NOTIFICATION_ATTEMPTS: "5"
           MODE: ${{ inputs.mode || 'check' }}
+          EVENT: ${{ github.event_name }}
         run: |
+          # Until the secrets are added (README Step 6), scheduled runs skip instead of failing every 5 minutes.
+          if [ "$EVENT" = "schedule" ] && { [ -z "$ALERTS_API_URL" ] || [ -z "$SMTP_PASSWORD" ]; }; then
+            echo "::warning::Checker not configured yet (ALERTS_API_URL / SMTP secrets missing). Skipping."
+            exit 0
+          fi
           case "$MODE" in
             check)          python -m backend.check_prices ;;
             dry-run)        python -m backend.check_prices --dry-run ;;
-            test-whatsapp)  python -m backend.check_prices --test-whatsapp ;;
-            test-telegram)  python -m backend.check_prices --test-whatsapp ;;
+            test-email)     python -m backend.check_prices --test-email ;;
             *) echo "Unknown mode"; exit 1 ;;
           esac

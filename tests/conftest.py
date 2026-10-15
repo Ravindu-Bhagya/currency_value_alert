@@ -13,9 +13,6 @@ import requests
 from backend.alert_repository import Observation, RepositoryError, WorkItems
 from backend.models import Alert
 
-TELEGRAM_TOKEN = "123456789:AAH-test_token_abcdefghijklmnopqrstuv"
-
-
 class FakeResponse:
     def __init__(self, status_code: int = 200, json_data: Any = None, headers: Optional[dict] = None, text: str = ""):
         self.status_code = status_code
@@ -150,7 +147,7 @@ class FakeNotifier:
         self.fail_times = fail_times
         self.error = error
 
-    def send_message(self, text: str) -> int:
+    def send_message(self, text: str, subject: Optional[str] = None) -> int:
         if self.fail_times > 0:
             self.fail_times -= 1
             raise self.error
@@ -164,5 +161,4 @@ def no_sleep():
     return sleeps.append, sleeps
 
 
-__all__ = ["FakeResponse", "FakeSession", "make_record", "InMemoryRepository", "FakeBinance", "FakeNotifier",
-           "TELEGRAM_TOKEN", "requests"]
+__all__ = ["FakeResponse", "FakeSession", "make_record", "InMemoryRepository", "FakeBinance", "FakeNotifier", "requests"]

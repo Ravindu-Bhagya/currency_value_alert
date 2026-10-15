@@ -1,14 +1,14 @@
 # Binance Price Alert
 
-Track cryptocurrency prices and receive WhatsApp alerts.
+Track cryptocurrency prices and receive email alerts.
 
 A personal price-alert app. You create alerts in a web page (for example "XRP/USDT **above** 2.50").
-A scheduled job checks Binance prices about every 30 minutes and sends you a WhatsApp message
+A scheduled job checks Binance prices about every 5 minutes and sends you an email
 when a target is reached. Every component runs on a free tier, and none of them asks for a credit card.
 
-> **This is not a real-time monitor.** Prices are checked about every 30 minutes, and GitHub may
+> **This is not a real-time monitor.** Prices are checked about every 5 minutes, and GitHub may
 > start scheduled runs late. If the price touches your target and moves away between two checks,
-> the alert does **not** fire. See [The 30-minute interval](#the-30-minute-checking-interval).
+> the alert does **not** fire. See [The checking interval](#the-checking-interval).
 
 The app only reads public market data. It never trades and never asks for a Binance API key.
 
@@ -42,9 +42,9 @@ The app only reads public market data. It never trades and never asks for a Bina
                                                               └──────────────▲───────────────┘
                                                                              │ CHECKER_TOKEN
  ┌──────────────────────────────────────────┐                                │ (/internal/*)
- │ GitHub Actions, every 30 min (Python)    │ ───────────────────────────────┘
+ │ GitHub Actions, every 5 min (Python)     │ ───────────────────────────────┘
  │ backend/check_prices.py                  │ ──▶ Binance public API  (latest prices)
- │                                          │ ──▶ Twilio WhatsApp API (Messages)  
+ │                                          │ ──▶ Your mail server (SMTP)          
  └──────────────────────────────────────────┘
 ```
 
@@ -56,7 +56,7 @@ That's why alerts live in a tiny **Cloudflare Worker + D1 database**, both on Cl
 |---|---|
 | Creating alerts from the website | The browser calls the Worker with an **access key** (`ADMIN_TOKEN`). You type it into the app once. It isn't in the source code and is kept only in your browser. |
 | Scheduled worker reads/updates alerts | GitHub Actions calls the Worker's `/internal/*` endpoints with a **separate** `CHECKER_TOKEN`. This token cannot create or delete alerts, and the admin key cannot call the checker endpoints. |
-| Twilio (WhatsApp) credentials | Exist only as GitHub Actions secrets and are used only by the Python job. They never reach the browser or the Worker. |
+| Email (SMTP) credentials | Exist only as GitHub Actions secrets and are used only by the Python job. They never reach the browser or the Worker. |
 | Concurrency / duplicates | Every state change is one atomic conditional SQL update (`UPDATE … WHERE status='active' AND version=? RETURNING *`). Only one run can claim a trigger. The workflow also uses a `concurrency` group so runs never overlap. |
 
 Alternatives that were considered and rejected:
@@ -70,7 +70,7 @@ Alternatives that were considered and rejected:
 
 - A **GitHub** account (free).
 - A **Cloudflare** account (free, no credit card): <https://dash.cloudflare.com/sign-up>
-- A **Twilio** account (free trial, no credit card) and **WhatsApp** on your phone.
+- An **email account** that allows SMTP sending (a free Gmail account works).
 - On your computer, used once for setup:
   - **Git**
   - **Node.js 20 or newer** (for the `wrangler` deploy tool; `node --version`). The Worker tests need Node 22.13+.
@@ -104,23 +104,24 @@ git push -u origin main
 
 Before committing, run `git status` and confirm that no `.env` or `.dev.vars` file is listed.
 
-### Step 2: Set up WhatsApp delivery (Twilio)
+### Step 2: Set up email delivery (SMTP)
 
-Messages are sent through Twilio's WhatsApp API. The free **WhatsApp Sandbox** is enough for personal use.
+Alerts are sent as emails over SMTP. A free Gmail account works:
 
-1. Sign up at <https://www.twilio.com/try-twilio> and verify your phone number.
-2. In the Twilio Console, open **Messaging → Try it out → Send a WhatsApp message**.
-3. From WhatsApp on your phone, send the shown `join <two-words>` code to the sandbox number
-   (usually `+1 415 523 8886`). Twilio can't message you until you've done this. The sandbox
-   session expires after 72 hours without messages; send the join code again if alerts stop arriving.
-4. Note these values (treat the auth token like a password: never post or commit it):
+1. Turn on **2-Step Verification** for the Google account: <https://myaccount.google.com/security>.
+2. Create an **App Password** at <https://myaccount.google.com/apppasswords> (name it e.g. `Price Alert`).
+   Google shows a 16-character password once. This is your `SMTP_PASSWORD`; treat it like a password and never commit it.
+   Your normal Gmail password will **not** work.
+3. Note these values:
 
-   | Value | Where to find it |
-   |---|---|
-   | `TWILIO_ACCOUNT_SID` | Console home page, **Account SID** (starts with `AC`) |
-   | `TWILIO_AUTH_TOKEN` | Console home page, **Auth Token** |
-   | `TWILIO_WHATSAPP_FROM` | The sandbox number, e.g. `whatsapp:+14155238886` |
-   | `WHATSAPP_TO_NUMBER` | Your own WhatsApp number in international format, e.g. `+94771234567` |
+   | Value | Gmail | Other providers |
+   |---|---|---|
+   | `SMTP_HOST` | `smtp.gmail.com` | Your provider's SMTP server (e.g. `smtp.office365.com`) |
+   | `SMTP_PORT` | `587` | `587` (STARTTLS) or `465` (TLS) |
+   | `SMTP_USERNAME` | Your Gmail address | Your mailbox login |
+   | `SMTP_PASSWORD` | The App Password | Your SMTP password |
+   | `EMAIL_TO` | Where alerts go; several addresses separated by commas | same |
+   | `EMAIL_FROM` | Optional; defaults to `SMTP_USERNAME` | Must be an address the server lets you send as |
 
 ### Step 3: Generate two access keys
 
@@ -192,27 +193,29 @@ git push
 ### Step 6: Add the GitHub Actions secrets
 
 In your repository on GitHub: **Settings → Secrets and variables → Actions → New repository secret**.
-Create exactly these six secrets:
+Create these secrets:
 
 | Name | Value |
 |---|---|
 | `ALERTS_API_URL` | Your Worker URL, e.g. `https://binance-price-alert.YOUR-SUBDOMAIN.workers.dev` |
 | `CHECKER_TOKEN` | The CHECKER_TOKEN from Step 3 (same value as the Worker secret) |
-| `TWILIO_ACCOUNT_SID` | From Step 2 |
-| `TWILIO_AUTH_TOKEN` | From Step 2 |
-| `TWILIO_WHATSAPP_FROM` | From Step 2, e.g. `whatsapp:+14155238886` |
-| `WHATSAPP_TO_NUMBER` | Your WhatsApp number, e.g. `+94771234567` |
+| `SMTP_HOST` | From Step 2, e.g. `smtp.gmail.com` |
+| `SMTP_PORT` | From Step 2, e.g. `587` |
+| `SMTP_USERNAME` | From Step 2 |
+| `SMTP_PASSWORD` | From Step 2 (Gmail: the App Password) |
+| `EMAIL_TO` | Recipient address(es) |
+| `EMAIL_FROM` | Optional |
 
 `ADMIN_TOKEN` is **not** needed in GitHub.
 
-### Step 7: Enable GitHub Actions and test WhatsApp
+### Step 7: Enable GitHub Actions and test email
 
 1. Open the **Actions** tab of your repository. If GitHub asks, click **"I understand my workflows, go ahead and enable them"**.
-2. Select **Price alert checker → Run workflow**, choose mode **`test-whatsapp`**, and click **Run workflow**.
-3. Within about a minute you should receive "✅ Binance Price Alert, Test message…" in WhatsApp.
+2. Select **Price alert checker → Run workflow**, choose mode **`test-email`**, and click **Run workflow**.
+3. Within about a minute you should receive "✅ Binance Price Alert, Test message…" by email (check the spam folder the first time).
    If the run fails, open it and read the log (see [Troubleshooting](#troubleshooting)).
 
-After this, the checker runs automatically every 30 minutes. You can also run it any time with mode `check`.
+After this, the checker runs automatically every 5 minutes. You can also run it any time with mode `check`.
 
 ### Step 8: Deploy the website to GitHub Pages
 
@@ -245,7 +248,7 @@ created and triggered times, and notification status.
 - **Edit** (active alerts only): change the target or condition.
 - **Cancel alert**: stops checking it and keeps it in the list as *Cancelled*.
 - **Delete**: removes it permanently, after you confirm.
-- **Retry notification**: shown when WhatsApp delivery failed and the retries ran out.
+- **Retry notification**: shown when email delivery failed and the retries ran out.
 
 **Receiving notifications.** When an alert fires, you get:
 
@@ -275,12 +278,12 @@ cp .env.example .env          # then edit .env and fill in the values (.env is g
 set -a; source .env; set +a
 
 .venv/bin/python -m backend.check_prices --dry-run         # reads alerts and prices; writes nothing, sends nothing
-.venv/bin/python -m backend.check_prices --test-whatsapp   # sends one test message
+.venv/bin/python -m backend.check_prices --test-email      # sends one test email
 .venv/bin/python -m backend.check_prices                   # a real run (same as GitHub Actions)
 ```
 
 Exit codes: `0` ok, `1` configuration error, `2` alert storage unreachable/rejected,
-`3` Binance unavailable, `4` a WhatsApp delivery failed.
+`3` Binance unavailable, `4` an email delivery failed.
 
 ### Run everything locally (no Cloudflare deploy)
 
@@ -307,10 +310,10 @@ No tracked files need editing: `.dev.vars` overrides `ALLOWED_ORIGINS` for `wran
 
 ## Running the tests
 
-The tests use mocks only. They never send WhatsApp messages, never call Binance, and never touch your real data.
+The tests use mocks only. They never send emails, never call Binance, and never touch your real data.
 
 ```bash
-# Python (alert logic, Binance client, WhatsApp notifier, storage client, concurrency)
+# Python (alert logic, Binance client, email notifier, storage client, concurrency)
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q
@@ -323,7 +326,7 @@ The **Tests** workflow runs both suites on every push.
 
 What is covered: Above and Below triggers, prices exactly equal to the target, conditions not met, invalid prices
 and symbols, cancelled alerts ignored, no duplicate notification for triggered alerts, Binance errors
-(5xx, 429 Retry-After, 451 host fallback, 418 ban), WhatsApp/Twilio errors (retryable vs permanent, credential
+(5xx, 429 Retry-After, 451 host fallback, 418 ban), SMTP errors (retryable vs permanent, password
 redaction), failed-notification retries and the attempt limit, persistent create/list/edit/cancel/delete,
 auth separation, CORS, and concurrent runs (atomic claim, stale versions, expired leases).
 
@@ -335,33 +338,33 @@ auth separation, CORS, and concurrent runs (atomic claim, stale versions, expire
 |---|---|
 | **Active** | Checked on every run. |
 | **Triggered** | The condition was met; the trigger price and time are recorded. Never checked or re-notified again. |
-| **Notification Failed** | Triggered, but WhatsApp delivery failed (the error is shown). |
+| **Notification Failed** | Triggered, but email delivery failed (the error is shown). |
 | **Cancelled** | You stopped it. Never checked. |
 
 Notification status: *Waiting for trigger → Sending → Delivered*, or *Failed (attempt n/5), will retry*.
 
-**What happens when the price is reached but WhatsApp fails:**
+**What happens when the price is reached but email fails:**
 1. The alert is still marked **Triggered**, with the price and time recorded. The trigger itself is never lost.
 2. The notification is marked **failed** with the error message, and the run exits with code 4 (red in Actions).
 3. Each following run retries it (using the original trigger price), up to `MAX_NOTIFICATION_ATTEMPTS` (5) in total.
-   Within a single run, network errors, 5xx responses and Twilio 429 rate limits are also retried with backoff.
+   Within a single run, network errors, 5xx responses and temporary (4xx) SMTP errors are also retried with backoff.
 4. After 5 failed attempts it stays **Notification Failed** until you fix the cause and press **Retry notification**.
 
 **Duplicate protection.** Only the run that atomically claims an alert sends its message, and a
 delivered notification is never claimed again. One edge case remains: if a run dies *after*
-Twilio accepted the message but *before* "delivered" was saved, the 10-minute lease expires and a
+the mail server accepted the message but *before* "delivered" was saved, the 10-minute lease expires and a
 later run re-sends it. So delivery is **at-least-once**. A rare duplicate is possible; a silently lost alert is not.
 
 ---
 
-## The 30-minute checking interval
+## The checking interval
 
-- The workflow is scheduled with `*/30 * * * *` (UTC). GitHub doesn't guarantee exact timing:
+- The workflow is scheduled with `*/5 * * * *` (UTC), GitHub's shortest allowed interval. GitHub doesn't guarantee exact timing:
   runs are often 5–15 minutes late, and occasionally skipped during high load.
 - Only the price **at the moment of each check** is compared. A spike that crosses your target and comes back
   between two checks is **missed**. This is a convenience tool, not a trading or risk-management system.
-- You can shorten the interval in `.github/workflows/price-alert.yml` (GitHub's minimum is every 5 minutes).
-  On a private repository, mind the Actions minutes (below).
+- You can change the interval in `.github/workflows/price-alert.yml`. Keep the repository **public**:
+  at 5 minutes a private repository would use far more than the free Actions minutes (below).
 - **GitHub disables scheduled workflows in public repositories after 60 days without repository activity.**
   GitHub emails you first. To keep it running, re-enable the workflow in the Actions tab, or push any commit.
 
@@ -379,9 +382,9 @@ later run re-sends it. So delivery is **at-least-once**. A rare duplicate is pos
 | "Could not load trading pairs from Binance" | Your network or region blocks Binance; click **Try again**. Both `data-api.binance.vision` and `api.binance.com` are tried. |
 | Actions log: `Alert API rejected the CHECKER_TOKEN` | The GitHub secret `CHECKER_TOKEN` doesn't match the Worker secret. |
 | Actions log: `Environment variable … is not set` | A GitHub secret is missing or misspelled (Step 6). |
-| WhatsApp error: `Authenticate` (HTTP 401) | Wrong `TWILIO_ACCOUNT_SID` or `TWILIO_AUTH_TOKEN`. |
-| WhatsApp error mentioning the recipient / error 63015 | You haven't joined the sandbox, or the 72-hour sandbox session expired. Send the `join …` code again (Step 2.3). |
-| `WHATSAPP_TO_NUMBER is missing or malformed` | Use international format with country code, e.g. `+94771234567`. |
+| Email error: `SMTP login failed (535)` | Wrong `SMTP_USERNAME` / `SMTP_PASSWORD`. Gmail needs an App Password, not your normal password. |
+| Email error: `The mail server refused EMAIL_TO` | Check the `EMAIL_TO` address. |
+| Test email never arrives | Look in the spam folder and mark it "Not spam". |
 | Actions log: `Binance API unavailable (… HTTP 451 …)` | Both Binance hosts refused the runner's region. Re-run later; if it persists, set a `BINANCE_BASE_URLS` env value in the workflow. |
 | Scheduled runs stopped | See the 60-day note above. Also check **Actions → Price alert checker** isn't disabled. |
 | Alert shows "… is not currently listed on Binance Spot" | The pair was delisted or suspended. Cancel or delete the alert. |
@@ -392,12 +395,12 @@ later run re-sends it. So delivery is **at-least-once**. A rare duplicate is pos
 
 | Service | Free allowance (at the time of writing; check the providers' pages) | This app's usage |
 |---|---|---|
-| GitHub Actions | Unlimited minutes for **public** repos; 2,000 min/month for private repos (Free plan) | ~48 runs/day, under 1 minute each. Private repos use about 1,440 billed minutes/month. |
+| GitHub Actions | Unlimited minutes for **public** repos; 2,000 min/month for private repos (Free plan) | ~288 runs/day, under 1 minute each. Private repos would use about 8,640 billed minutes/month (over the free allowance). |
 | GitHub Pages | Free for public repos (soft limit 100 GB bandwidth/month) | Tiny |
 | Cloudflare Workers (Free) | 100,000 requests/day | A few hundred per day |
 | Cloudflare D1 (Free) | 5 GB storage, 5M row reads/day, 100k row writes/day | Kilobytes; hundreds of rows touched per day |
 | Binance public API | Request-weight limit (6,000/min per IP) | 1 price request (weight 4) per run |
-| Twilio WhatsApp | Free trial credit; the sandbox only reaches numbers that joined it | One message per triggered alert |
+| Gmail SMTP | Free; about 500 emails/day for a personal account | One email per triggered alert |
 
 **What could ever cost money:** nothing, at personal-use scale. You'd only need to pay if you ran the repository
 as **private** with a much shorter interval (exceeding 2,000 Actions minutes/month), or if you went far past
@@ -412,7 +415,7 @@ charging you. The app caps itself at 200 active alerts.
   runtime, and it's stored in `sessionStorage` (or `localStorage` if you tick *Remember*) in your browser only.
 - **Two least-privilege keys.** `ADMIN_TOKEN` (UI) and `CHECKER_TOKEN` (Actions) are checked in constant time.
   Neither can use the other's endpoints.
-- **Twilio credentials** live only in GitHub Actions secrets. They're redacted from error messages and logs, and
+- **SMTP credentials** live only in GitHub Actions secrets. They're redacted from error messages and logs, and
   `urllib3` debug logging (which would print request URLs) is suppressed.
 - **Validation everywhere:** symbols (`^[A-Z0-9]{2,20}$` plus a live Binance check), prices (positive, at most 8 decimals,
   stored as exact decimal strings), conditions, ids (UUID), body size (64 KB) and alert count (200 active).
@@ -446,17 +449,17 @@ BinanceAlert/
 │   ├── alert_service.py      # evaluation + delivery logic
 │   ├── alert_repository.py   # client for the Worker's /internal API
 │   ├── binance_client.py
-│   ├── whatsapp_notifier.py
+│   ├── email_notifier.py
 │   └── models.py
 ├── tests/
 │   ├── conftest.py
 │   ├── test_alert_logic.py
 │   ├── test_alert_repository.py
 │   ├── test_binance_client.py
-│   ├── test_whatsapp_notifier.py
+│   ├── test_email_notifier.py
 │   └── worker.test.mjs
 ├── .github/workflows/
-│   ├── price-alert.yml       # every 30 min + manual
+│   ├── price-alert.yml       # every 5 min + manual
 │   ├── pages.yml             # deploys frontend/ to GitHub Pages
 │   └── tests.yml
 ├── requirements.txt          # runtime: requests

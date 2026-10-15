@@ -641,7 +641,7 @@
 
     const notes = [];
     if (a.notification_error && a.notification_status === "failed") {
-      notes.push(el("div", { class: "alert-note", text: `WhatsApp error: ${a.notification_error}` }));
+      notes.push(el("div", { class: "alert-note", text: `Email error: ${a.notification_error}` }));
     }
     if (a.last_error && a.status === "active") {
       notes.push(el("div", { class: "alert-note warn", text: a.last_error }));

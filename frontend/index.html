@@ -6,7 +6,7 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="Track cryptocurrency prices and receive WhatsApp alerts.">
+  <meta name="description" content="Track cryptocurrency prices and receive email alerts.">
   <title>Binance Price Alert</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f0b90b'/%3E%3Cpath d='M16 7a6 6 0 0 0-6 6v4l-2 3h16l-2-3v-4a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0z' fill='%23111'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
@@ -22,7 +22,7 @@
         </span>
         <div>
           <h1>Binance Price Alert</h1>
-          <p class="subtitle">Track cryptocurrency prices and receive WhatsApp alerts.</p>
+          <p class="subtitle">Track cryptocurrency prices and receive email alerts.</p>
         </div>
       </div>
       <button type="button" class="btn btn-ghost" id="connect-btn" aria-haspopup="dialog">
@@ -96,7 +96,7 @@
         </form>
 
         <p class="fine-print">
-          Prices are checked about every 30 minutes by a scheduled job. A price that touches your
+          Prices are checked about every 5 minutes by a scheduled job. A price that touches your
           target briefly between checks can be missed. This is not a real-time monitor.
         </p>
       </section>
@@ -128,7 +128,7 @@
   </main>
 
   <footer class="site-footer container">
-    <p>Market data: Binance public Spot API. Notifications: WhatsApp via Twilio. Monitoring only. No trading.</p>
+    <p>Market data: Binance public Spot API. Notifications: email. Monitoring only. No trading.</p>
   </footer>
 
   <!-- ============================================================ dialogs -->

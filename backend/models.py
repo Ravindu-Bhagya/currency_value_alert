@@ -31,7 +31,7 @@ class NotificationStatus(str, Enum):
     NONE = "none"        # alert has not triggered yet
     PENDING = "pending"  # triggered, waiting to be (re)sent
     SENDING = "sending"  # a checker run holds a lease and is sending right now
-    SENT = "sent"        # WhatsApp confirmed delivery
+    SENT = "sent"        # mail server accepted the email
     FAILED = "failed"    # last attempt failed; retried on later runs up to the attempt limit
 
 

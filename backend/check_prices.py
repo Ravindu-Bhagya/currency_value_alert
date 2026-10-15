@@ -2,21 +2,23 @@
 
 Usage (from the repository root):
     python -m backend.check_prices                  # normal run
-    python -m backend.check_prices --dry-run        # evaluate only: no writes, no WhatsApp
-    python -m backend.check_prices --test-whatsapp  # send one test message
+    python -m backend.check_prices --dry-run        # evaluate only: no writes, no email
+    python -m backend.check_prices --test-email     # send one test email
 
 Environment variables:
     ALERTS_API_URL            URL of the alert storage Worker (https://...workers.dev)
     CHECKER_TOKEN             Worker token for the checker (/internal/* endpoints)
-    TWILIO_ACCOUNT_SID        Twilio account SID for WhatsApp delivery
-    TWILIO_AUTH_TOKEN         Twilio auth token for WhatsApp delivery
-    TWILIO_WHATSAPP_FROM      Twilio WhatsApp sender number, e.g. whatsapp:+14155238886
-    WHATSAPP_TO_NUMBER        Destination WhatsApp number, e.g. +94705049478
+    SMTP_HOST                 Mail server, default smtp.gmail.com
+    SMTP_PORT                 Default 587 (STARTTLS); 465 uses implicit TLS
+    SMTP_USERNAME             Mail account login, e.g. you@gmail.com
+    SMTP_PASSWORD             Mail account password (Gmail: an App Password)
+    EMAIL_FROM                Sender address, default SMTP_USERNAME
+    EMAIL_TO                  Recipient address(es), comma-separated
     MAX_NOTIFICATION_ATTEMPTS Optional, default 5
     BINANCE_BASE_URLS         Optional, comma-separated list of Binance API hosts
 
 Exit codes: 0 ok, 1 configuration error, 2 alert storage error,
-            3 Binance unavailable, 4 WhatsApp delivery failed.
+            3 Binance unavailable, 4 email delivery failed.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from .alert_service import (
     AlertService,
 )
 from .binance_client import BinanceClient
-from .whatsapp_notifier import NotificationError, WhatsAppNotifier
+from .email_notifier import EmailNotifier, NotificationError, parse_recipients
 
 log = logging.getLogger("price_checker")
 
@@ -60,12 +62,12 @@ def configure_logging(verbose: bool) -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s"))
     handler.addFilter(SecretRedactingFilter(
-        [os.environ.get(k, "") for k in ("TWILIO_AUTH_TOKEN", "TWILIO_ACCOUNT_SID", "CHECKER_TOKEN", "WHATSAPP_TO_NUMBER", "TWILIO_WHATSAPP_FROM")]
+        [os.environ.get(k, "") for k in ("SMTP_PASSWORD", "CHECKER_TOKEN")]
     ))
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
-    # urllib3 debug logs include request URLs, which contain the Twilio account SID.
+    # urllib3 debug logs include request URLs; keep them out of the Actions log.
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
@@ -76,12 +78,17 @@ def env(name: str, required: bool = True) -> str:
     return value
 
 
-def build_notifier() -> WhatsAppNotifier:
-    return WhatsAppNotifier(
-        env("TWILIO_ACCOUNT_SID"),
-        env("TWILIO_AUTH_TOKEN"),
-        env("TWILIO_WHATSAPP_FROM"),
-        env("WHATSAPP_TO_NUMBER"),
+def build_notifier() -> EmailNotifier:
+    port = env("SMTP_PORT", required=False) or "587"
+    if not port.isdigit():
+        raise ValueError("SMTP_PORT must be a number.")
+    return EmailNotifier(
+        env("SMTP_HOST", required=False) or "smtp.gmail.com",
+        int(port),
+        env("SMTP_USERNAME"),
+        env("SMTP_PASSWORD"),
+        env("EMAIL_FROM", required=False),
+        parse_recipients(env("EMAIL_TO")),
     )
 
 
@@ -90,18 +97,14 @@ def build_binance() -> BinanceClient:
     return BinanceClient(base_urls=urls or None)
 
 
-def cmd_test_whatsapp() -> int:
+def cmd_test_email() -> int:
     notifier = build_notifier()
     notifier.send_message(
-        "✅ Binance Price Alert\n\nTest message: your WhatsApp notifications are configured correctly."
+        "✅ Binance Price Alert\n\nTest message: your email notifications are configured correctly.",
+        subject="✅ Binance Price Alert: test email",
     )
-    log.info("Test message delivered.")
+    log.info("Test email delivered to %s.", ", ".join(notifier.to_addrs))
     return EXIT_OK
-
-
-def cmd_test_telegram() -> int:
-    log.warning("The --test-telegram flag is deprecated; using WhatsApp instead.")
-    return cmd_test_whatsapp()
 
 
 def cmd_check(dry_run: bool) -> int:
@@ -126,24 +129,23 @@ def cmd_check(dry_run: bool) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Check Binance prices and send WhatsApp alerts.")
+    parser = argparse.ArgumentParser(description="Check Binance prices and send email alerts.")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="evaluate alerts without writing or notifying")
-    mode.add_argument("--test-whatsapp", action="store_true", help="send a single WhatsApp test message")
-    mode.add_argument("--test-telegram", action="store_true", help="deprecated alias for --test-whatsapp")
+    mode.add_argument("--test-email", action="store_true", help="send a single test email")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     configure_logging(args.verbose)
 
     try:
-        if args.test_whatsapp or args.test_telegram:
-            return cmd_test_whatsapp()
+        if args.test_email:
+            return cmd_test_email()
         return cmd_check(args.dry_run)
     except ValueError as exc:
         log.error("Configuration error: %s", exc)
         return EXIT_CONFIG_ERROR
     except NotificationError as exc:
-        log.error("WhatsApp error: %s", exc)
+        log.error("Email error: %s", exc)
         return EXIT_NOTIFICATION_ERROR
 
 if __name__ == "__main__":

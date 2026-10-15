@@ -6,13 +6,13 @@ Delivery semantics
    (status active -> triggered, notification_status -> sending, with a 10-minute lease).
    Only the run that wins the claim sends the notification, so concurrent runs cannot
    both notify.
-2. The run then calls WhatsApp:
+2. The run then sends the email:
      success -> notification_status = sent      (never sent again)
      failure -> notification_status = failed    (retried on following runs)
 3. Failed notifications are re-claimed on later runs until MAX_NOTIFICATION_ATTEMPTS is
    reached. After that they stay "failed" (shown as "Notification Failed" in the UI) until
    the user clicks "Retry notification".
-4. If a run dies after WhatsApp accepted the message but before "sent" was recorded, the
+4. If a run dies after the mail server accepted the message but before "sent" was recorded, the
    lease expires and a later run sends it again. Delivery is therefore at-least-once:
    a rare duplicate is possible, a silently lost alert is not.
 """
@@ -27,7 +27,7 @@ from typing import Dict, List, Optional
 from .alert_repository import AlertRepository, Observation, RepositoryError
 from .binance_client import BinanceClient, BinanceError
 from .models import Alert, AlertStatus, Condition
-from .whatsapp_notifier import NotificationError, WhatsAppNotifier
+from .email_notifier import EmailNotifier, NotificationError
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +53,12 @@ def format_price(value: Decimal) -> str:
     whole, _, frac = text.partition(".")
     frac = frac[:8].ljust(2, "0")
     return f"{whole}.{frac}"
+
+
+def build_notification_subject(alert: Alert, price: Decimal) -> str:
+    quote = f" {alert.quote_asset}" if alert.quote_asset else ""
+    return (f"🔔 {alert.display_pair} is {alert.condition.value} {format_price(alert.target_price)}{quote} "
+            f"(now {format_price(price)}{quote})")
 
 
 def build_notification_message(alert: Alert, price: Decimal) -> str:
@@ -99,12 +105,12 @@ class AlertService:
         self,
         repository: AlertRepository,
         binance: BinanceClient,
-        notifier: Optional[WhatsAppNotifier],
+        notifier: Optional[EmailNotifier],
         max_notification_attempts: int = 5,
         dry_run: bool = False,
     ):
         if notifier is None and not dry_run:
-            raise ValueError("A WhatsApp notifier is required unless dry_run is enabled.")
+            raise ValueError("An email notifier is required unless dry_run is enabled.")
         self.repository = repository
         self.binance = binance
         self.notifier = notifier
@@ -209,14 +215,14 @@ class AlertService:
     def _deliver(self, alert: Alert, price: Decimal, summary: RunSummary) -> None:
         assert self.notifier is not None
         try:
-            self.notifier.send_message(build_notification_message(alert, price))
+            self.notifier.send_message(build_notification_message(alert, price), subject=build_notification_subject(alert, price))
         except NotificationError as exc:
             summary.notification_failures += 1
-            log.error("Alert %s: WhatsApp delivery failed: %s", alert.id, exc)
+            log.error("Alert %s: email delivery failed: %s", alert.id, exc)
             self._record_result(alert.id, False, str(exc), summary)
             return
         summary.notifications_sent += 1
-        log.info("Alert %s: WhatsApp notification delivered", alert.id)
+        log.info("Alert %s: email notification delivered", alert.id)
         self._record_result(alert.id, True, None, summary)
 
     def _record_result(self, alert_id: str, delivered: bool, error: Optional[str], summary: RunSummary) -> None:
