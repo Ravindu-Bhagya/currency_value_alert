@@ -8,13 +8,13 @@ compatibility_date = "2025-01-01"
 # Comma-separated list of web origins allowed to call the API from a browser.
 # Example: "https://your-github-username.github.io"
 # Do NOT add a path (no "/binance-price-alert" suffix) - an origin is scheme + host only.
-ALLOWED_ORIGINS = "https://YOUR-GITHUB-USERNAME.github.io"
+ALLOWED_ORIGINS = "https://ravindu-bhagya.github.io"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "binance-alerts"
 # Replace with the database_id printed by: npx wrangler d1 create binance-alerts
-database_id = "REPLACE-WITH-YOUR-D1-DATABASE-ID"
+database_id = "11b9ecd7-9b91-44fd-a7a6-665306cdfb8d"
 
 # Secrets (never put them in this file). Set them with:
 #   npx wrangler secret put ADMIN_TOKEN

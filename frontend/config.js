@@ -7,7 +7,7 @@ window.APP_CONFIG = {
   // (override its URL with ?api=http://127.0.0.1:PORT).
   apiBaseUrl: ["localhost", "127.0.0.1"].includes(location.hostname)
     ? new URLSearchParams(location.search).get("api") || "http://127.0.0.1:8787"
-    : "https://binance-price-alert.YOUR-SUBDOMAIN.workers.dev",
+    : "https://binance-price-alert.binance-price-alert-worker.workers.dev",
 
   // Binance public market-data hosts, tried in order.
   binanceBaseUrls: ["https://data-api.binance.vision", "https://api.binance.com"],
